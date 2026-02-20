@@ -6,10 +6,8 @@ namespace zenith::platform {
 
 class StdFilesystemEnumerator final : public core::IFileEnumerator {
 public:
-    std::vector<core::FileItem> enumerate(const std::vector<std::string>& paths,
-                                          bool ignore_hidden,
-                                          const std::unordered_set<std::string>& extensions,
-                                          const std::optional<std::uintmax_t>& max_bytes,
+    std::vector<core::FileItem> enumerate(const core::SearchRequest& request,
+                                          std::stop_token stop_token,
                                           const ErrorCallback& on_error) const override;
 };
 

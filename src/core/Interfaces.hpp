@@ -7,8 +7,8 @@
 #include <cstdint>
 #include <functional>
 #include <memory>
-#include <optional>
 #include <span>
+#include <stop_token>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -25,10 +25,8 @@ class IFileEnumerator {
 public:
     using ErrorCallback = std::function<void(const Error&)>;
     virtual ~IFileEnumerator() = default;
-    virtual std::vector<FileItem> enumerate(const std::vector<std::string>& paths,
-                                            bool ignore_hidden,
-                                            const std::unordered_set<std::string>& extensions,
-                                            const std::optional<std::uintmax_t>& max_bytes,
+    virtual std::vector<FileItem> enumerate(const SearchRequest& request,
+                                            std::stop_token stop_token,
                                             const ErrorCallback& on_error) const = 0;
 };
 
@@ -38,6 +36,7 @@ public:
     virtual Expected<std::string, Error> read_prefix(const std::string& path, std::size_t max_bytes) const = 0;
     virtual Expected<void, Error> read_chunks(const std::string& path,
                                               std::size_t chunk_size,
+                                              std::stop_token stop_token,
                                               const std::function<Expected<void, Error>(const std::string&)>& on_chunk) const = 0;
 };
 

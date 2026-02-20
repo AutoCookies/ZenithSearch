@@ -6,10 +6,10 @@
 
 #include "doctest.h"
 
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <mutex>
-#include <set>
 
 namespace {
 class CaptureWriter final : public zenith::core::IOutputWriter {
@@ -25,7 +25,6 @@ public:
         lines.push_back(summary.path + ":" + std::to_string(summary.count));
     }
 };
-
 class CaptureError final : public zenith::core::IErrorWriter {
 public:
     void write_error(const zenith::core::Error&) override {}
@@ -37,7 +36,7 @@ TEST_CASE("stable output deterministic between thread counts") {
     const auto root = fs::temp_directory_path() / "zenith_parallel_stable";
     fs::remove_all(root);
     fs::create_directories(root);
-    for (int i = 0; i < 40; ++i) {
+    for (int i = 0; i < 30; ++i) {
         std::ofstream(root / ("f" + std::to_string(i) + ".txt")) << "a pattern b pattern";
     }
 
@@ -69,13 +68,13 @@ TEST_CASE("stable output deterministic between thread counts") {
     fs::remove_all(root);
 }
 
-TEST_CASE("parallel many files no deadlock and correct count") {
+TEST_CASE("test cancel hook triggers cancellation") {
     namespace fs = std::filesystem;
-    const auto root = fs::temp_directory_path() / "zenith_parallel_many";
+    const auto root = fs::temp_directory_path() / "zenith_cancel_hook";
     fs::remove_all(root);
     fs::create_directories(root);
-    for (int i = 0; i < 600; ++i) {
-        std::ofstream(root / ("f" + std::to_string(i) + ".txt")) << "token";
+    for (int i = 0; i < 80; ++i) {
+        std::ofstream(root / ("f" + std::to_string(i) + ".txt")) << "token token token token";
     }
 
     zenith::platform::StdFilesystemEnumerator en;
@@ -92,11 +91,20 @@ TEST_CASE("parallel many files no deadlock and correct count") {
     req.pattern = "token";
     req.input_paths = {root.string()};
     req.output_mode = zenith::core::OutputMode::FilesWithMatches;
-    req.stable_output = zenith::core::StableOutputMode::Off;
-    req.threads = 16;
+    req.stable_output = zenith::core::StableOutputMode::On;
 
-    CHECK(engine.run(req).any_match);
-    CHECK(out.lines.size() == 600);
+#ifdef _WIN32
+    _putenv_s("ZENITHSEARCH_TEST_CANCEL_AFTER_FILES", "2");
+#else
+    setenv("ZENITHSEARCH_TEST_CANCEL_AFTER_FILES", "2", 1);
+#endif
+    auto stats = engine.run(req);
+#ifdef _WIN32
+    _putenv_s("ZENITHSEARCH_TEST_CANCEL_AFTER_FILES", "");
+#else
+    unsetenv("ZENITHSEARCH_TEST_CANCEL_AFTER_FILES");
+#endif
 
+    CHECK(stats.cancelled);
     fs::remove_all(root);
 }

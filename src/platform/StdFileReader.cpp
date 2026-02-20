@@ -19,6 +19,7 @@ core::Expected<std::string, core::Error> StdFileReader::read_prefix(const std::s
 core::Expected<void, core::Error> StdFileReader::read_chunks(
     const std::string& path,
     std::size_t chunk_size,
+    std::stop_token stop_token,
     const std::function<core::Expected<void, core::Error>(const std::string&)>& on_chunk) const {
     std::ifstream input(path, std::ios::binary);
     if (!input) {
@@ -27,6 +28,9 @@ core::Expected<void, core::Error> StdFileReader::read_chunks(
 
     std::vector<char> buf(chunk_size);
     while (input) {
+        if (stop_token.stop_requested()) {
+            return {};
+        }
         input.read(buf.data(), static_cast<std::streamsize>(buf.size()));
         const auto read_count = input.gcount();
         if (read_count <= 0) {

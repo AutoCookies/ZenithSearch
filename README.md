@@ -1,22 +1,8 @@
-# ZenithSearch (Phase 2)
+# ZenithSearch v1.0.0
 
-ZenithSearch is a cross-platform keyword search CLI (minimal grep-like tool) with deterministic behavior, mmap acceleration, and parallel scanning.
+Production-ready cross-platform keyword search CLI with deterministic output, mmap acceleration, parallel scan, ignore/exclude/glob filtering, and graceful cancellation.
 
-## Features
-- Recursive scan across files/directories.
-- Streaming file read (1MB chunks) and memory-mapped scanning.
-- Parallel scanning with configurable thread count.
-- Deterministic stable output ordering (default on).
-- Byte-based, case-sensitive substring search with multiple algorithms:
-  - `naive`
-  - `bmh` (Boyer-Moore-Horspool)
-  - `boyer_moore`
-  - `auto`
-- Binary detection heuristic (first 4KB contains `\0`).
-- Human and JSONL output.
-- Exit codes: `0` match found, `1` no matches, `2` usage/fatal error.
-
-## Build (Linux/macOS/Windows)
+## Build
 ```bash
 cmake -S . -B build
 cmake --build build
@@ -27,57 +13,47 @@ cmake --build build
 ctest --test-dir build --output-on-failure
 ```
 
-## Run
+## Install / package
 ```bash
-# basic search
+cmake --install build --prefix install
+cpack --config build/CPackConfig.cmake
+```
+
+## Quick usage
+```bash
 ./build/zenithsearch "TODO" src
-
-# extension filter + count
-./build/zenithsearch --ext .cpp,.h --count "SearchEngine" src
-
-# mmap + parallel
-./build/zenithsearch --mmap on --threads 8 "pattern" .
-
-# algorithm selection
-./build/zenithsearch --algo bmh "pattern" src
-
-# fast unstable output mode
-./build/zenithsearch --stable-output off --threads 8 "pattern" src
-
-# JSONL mode
-./build/zenithsearch --json "pattern" src
+./build/zenithsearch --exclude "**/.git/**" --exclude-dir node_modules "pattern" .
+./build/zenithsearch --glob "**/*.cpp" --count "SearchEngine" src
+./build/zenithsearch --mmap on --threads 8 --stable-output on "pattern" .
+./build/zenithsearch --json --no-snippet "pattern" src
 ```
 
-Windows (PowerShell):
-```powershell
-.\build\zenithsearch.exe "TODO" src
-```
+## Cancellation behavior
+- Ctrl+C/SIGINT requests cancellation.
+- Exit code is `130`.
+- Output lines remain complete (no partial lines).
+- In stable-output mode, incomplete file results are discarded.
 
-## `--help` output
-```text
-Usage: zenithsearch [options] <pattern> <path...>
-Options:
-  --ext .log,.cpp,.h
-  --ignore-hidden
-  --max-bytes N
-  --binary (skip|scan) [default: skip]
-  --count
-  --files-with-matches
-  --json
-  --mmap (auto|on|off) [default: auto]
-  --threads N [default: auto]
-  --stable-output (on|off) [default: on]
-  --algo (auto|naive|boyer_moore|bmh) [default: auto]
-  --help
-  --version
-```
+## Output contracts
+- Human match mode: `path:offset[:snippet]`
+- Human count mode: `path:count`
+- Human files-with-matches mode: `path`
+- JSONL includes: `path`, `mode`, `pattern`, `binary`, plus:
+  - `offset` (+ optional `snippet`) for match mode
+  - `count` for count mode
 
-## Project layout
-- `src/core`: DTOs, expected type, algorithms, search engine.
-- `src/platform`: filesystem enumeration, file reader, mmap providers, output writers.
-- `src/cli`: argument parser.
-- `tests`: header-only test suite.
-- `.github/workflows/ci.yml`: CI matrix for Linux/macOS/Windows + smoke benchmark.
+## Symlink policy
+- Default `--follow-symlinks off`.
+- `on` follows symlinked directories with cycle protection.
 
-## Roadmap
-Phase 3 may add indexing and advanced query capabilities.
+## Ignore/exclude behavior
+- `.zenithignore` files are loaded by default; disable via `--no-ignore`.
+- `--exclude` uses glob over normalized `/` paths.
+- `--exclude-dir` filters directories by basename.
+- `--glob` acts as include filter after excludes.
+
+## Troubleshooting
+- Permission/locked file errors are written to stderr and scan continues.
+- For very large trees use `--threads`, `--mmap auto`, and `--max-matches` to control memory.
+
+See `docs/CLI.md` for full reference.

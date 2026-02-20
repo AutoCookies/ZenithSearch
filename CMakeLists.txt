@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(ZenithSearch VERSION 0.2.0 LANGUAGES CXX)
+project(ZenithSearch VERSION 1.0.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -28,9 +28,20 @@ add_library(zenithsearch_core
   ${ZENITH_PLATFORM_MMAP_SRC}
 )
 target_include_directories(zenithsearch_core PUBLIC src)
+if(BUILD_TESTING)
+  target_compile_definitions(zenithsearch_core PRIVATE ZENITHSEARCH_ENABLE_TEST_HOOKS=1)
+endif()
 
 add_executable(zenithsearch src/main.cpp)
 target_link_libraries(zenithsearch PRIVATE zenithsearch_core)
+
+install(TARGETS zenithsearch RUNTIME DESTINATION bin)
+install(FILES README.md LICENSE DESTINATION share/zenithsearch)
+
+set(CPACK_PACKAGE_NAME "zenithsearch")
+set(CPACK_PACKAGE_VERSION ${PROJECT_VERSION})
+set(CPACK_GENERATOR "TGZ;ZIP")
+include(CPack)
 
 include(CTest)
 if(BUILD_TESTING)
@@ -43,6 +54,8 @@ if(BUILD_TESTING)
     tests/test_exit_codes.cpp
     tests/test_mmap.cpp
     tests/test_parallel.cpp
+    tests/test_filters.cpp
+    tests/test_golden.cpp
   )
   target_link_libraries(zenithsearch_tests PRIVATE zenithsearch_core)
   target_include_directories(zenithsearch_tests PRIVATE src tests)

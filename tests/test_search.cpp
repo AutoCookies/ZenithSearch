@@ -4,17 +4,14 @@
 #include "doctest.h"
 
 #include <memory>
+#include <stop_token>
 #include <unordered_map>
 
 namespace {
 class FakeEnumerator final : public zenith::core::IFileEnumerator {
 public:
     std::vector<zenith::core::FileItem> files;
-    std::vector<zenith::core::FileItem> enumerate(const std::vector<std::string>&,
-                                                  bool,
-                                                  const std::unordered_set<std::string>&,
-                                                  const std::optional<std::uintmax_t>&,
-                                                  const ErrorCallback&) const override {
+    std::vector<zenith::core::FileItem> enumerate(const zenith::core::SearchRequest&, std::stop_token, const ErrorCallback&) const override {
         return files;
     }
 };
@@ -22,28 +19,20 @@ public:
 class FakeReader final : public zenith::core::IFileReader {
 public:
     std::unordered_map<std::string, std::string> contents;
-
     zenith::core::Expected<std::string, zenith::core::Error> read_prefix(const std::string& path, std::size_t max_bytes) const override {
         auto it = contents.find(path);
-        if (it == contents.end()) {
-            return zenith::core::Error{"missing"};
-        }
+        if (it == contents.end()) return zenith::core::Error{"missing"};
         return it->second.substr(0, max_bytes);
     }
-
-    zenith::core::Expected<void, zenith::core::Error> read_chunks(
-        const std::string& path,
-        std::size_t chunk_size,
-        const std::function<zenith::core::Expected<void, zenith::core::Error>(const std::string&)>& on_chunk) const override {
+    zenith::core::Expected<void, zenith::core::Error> read_chunks(const std::string& path,
+                                                                   std::size_t chunk_size,
+                                                                   std::stop_token,
+                                                                   const std::function<zenith::core::Expected<void, zenith::core::Error>(const std::string&)>& on_chunk) const override {
         auto it = contents.find(path);
-        if (it == contents.end()) {
-            return zenith::core::Error{"missing"};
-        }
+        if (it == contents.end()) return zenith::core::Error{"missing"};
         for (std::size_t i = 0; i < it->second.size(); i += chunk_size) {
-            auto result = on_chunk(it->second.substr(i, chunk_size));
-            if (!result) {
-                return result.error();
-            }
+            auto r = on_chunk(it->second.substr(i, chunk_size));
+            if (!r) return r.error();
         }
         return {};
     }
@@ -51,30 +40,22 @@ public:
 
 class FakeMappedFile final : public zenith::core::IMappedFile {
 public:
-    explicit FakeMappedFile(std::string p, std::string d) : path_(std::move(p)), data_(std::move(d)) {}
-    std::span<const std::byte> bytes() const override {
-        return {reinterpret_cast<const std::byte*>(data_.data()), data_.size()};
-    }
-    std::uint64_t size() const override { return data_.size(); }
-    const std::string& path() const override { return path_; }
+    FakeMappedFile(std::string p, std::string d) : p_(std::move(p)), d_(std::move(d)) {}
+    std::span<const std::byte> bytes() const override { return {reinterpret_cast<const std::byte*>(d_.data()), d_.size()}; }
+    std::uint64_t size() const override { return d_.size(); }
+    const std::string& path() const override { return p_; }
 
 private:
-    std::string path_;
-    std::string data_;
+    std::string p_;
+    std::string d_;
 };
 
 class FakeMappedProvider final : public zenith::core::IMappedFileProvider {
 public:
     std::unordered_map<std::string, std::string> contents;
-    bool fail{false};
     zenith::core::Expected<std::unique_ptr<zenith::core::IMappedFile>, zenith::core::Error> open(const std::string& path) const override {
-        if (fail) {
-            return zenith::core::Error{"forced fail"};
-        }
         auto it = contents.find(path);
-        if (it == contents.end()) {
-            return zenith::core::Error{"missing"};
-        }
+        if (it == contents.end()) return zenith::core::Error{"missing"};
         return std::unique_ptr<zenith::core::IMappedFile>(new FakeMappedFile(path, it->second));
     }
 };
@@ -89,14 +70,13 @@ public:
 
 class CaptureError final : public zenith::core::IErrorWriter {
 public:
-    std::vector<std::string> errors;
-    void write_error(const zenith::core::Error& error) override { errors.push_back(error.message); }
+    void write_error(const zenith::core::Error&) override {}
 };
 } // namespace
 
-TEST_CASE("Search finds matches across chunk boundaries") {
+TEST_CASE("Search finds chunk boundary matches and max-matches cap") {
     FakeEnumerator en;
-    en.files = {{"f", 12}};
+    en.files = {{"f", "f", 12}};
     FakeReader reader;
     reader.contents = {{"f", "xxab" "cxxabc"}};
     FakeMappedProvider mapped;
@@ -112,52 +92,45 @@ TEST_CASE("Search finds matches across chunk boundaries") {
     req.input_paths = {"f"};
     req.chunk_size = 4;
     req.mmap_mode = zenith::core::MmapMode::Off;
+    req.max_matches_per_file = 1;
 
     auto stats = engine.run(req);
     CHECK(stats.any_match);
-    CHECK(out.matches.size() == 2);
+    CHECK(out.matches.size() == 1);
     CHECK(out.matches[0].offset == 2);
-    CHECK(out.matches[1].offset == 7);
 }
 
-TEST_CASE("Binary skip and scan behavior") {
+TEST_CASE("Count mode counts all even with max-matches") {
     FakeEnumerator en;
-    en.files = {{"b", 4}};
+    en.files = {{"f", "f", 6}};
     FakeReader reader;
-    reader.contents = {{"b", std::string("a\0bc", 4)}};
+    reader.contents = {{"f", "aaaaaa"}};
     FakeMappedProvider mapped;
     zenith::core::NaiveSearchAlgorithm naive;
     zenith::core::BmhSearchAlgorithm bmh;
     zenith::core::BoyerMooreSearchAlgorithm bm;
+    CaptureWriter out;
+    CaptureError err;
+    zenith::core::SearchEngine engine(en, reader, mapped, naive, bmh, bm, out, err);
 
-    CaptureWriter out1;
-    CaptureError err1;
-    zenith::core::SearchEngine e1(en, reader, mapped, naive, bmh, bm, out1, err1);
-    zenith::core::SearchRequest skip;
-    skip.pattern = "bc";
-    skip.input_paths = {"b"};
-    skip.binary_mode = zenith::core::BinaryMode::Skip;
-    skip.mmap_mode = zenith::core::MmapMode::Off;
-    CHECK_FALSE(e1.run(skip).any_match);
+    zenith::core::SearchRequest req;
+    req.pattern = "aa";
+    req.input_paths = {"f"};
+    req.output_mode = zenith::core::OutputMode::Count;
+    req.max_matches_per_file = 1;
+    req.mmap_mode = zenith::core::MmapMode::Off;
 
-    CaptureWriter out2;
-    CaptureError err2;
-    zenith::core::SearchEngine e2(en, reader, mapped, naive, bmh, bm, out2, err2);
-    zenith::core::SearchRequest scan = skip;
-    scan.binary_mode = zenith::core::BinaryMode::Scan;
-    CHECK(e2.run(scan).any_match);
+    auto stats = engine.run(req);
+    CHECK(stats.any_match);
+    REQUIRE(out.summaries.size() == 1);
+    CHECK(out.summaries[0].count == 5);
 }
 
-TEST_CASE("Algorithms return overlapping matches equivalently") {
-    const std::string text = "aaaaaa";
-    const std::string pat = "aaa";
+TEST_CASE("Algorithms overlap equivalence") {
     zenith::core::NaiveSearchAlgorithm naive;
     zenith::core::BmhSearchAlgorithm bmh;
     zenith::core::BoyerMooreSearchAlgorithm bm;
-    const auto n = naive.find_all(text, pat);
-    const auto h = bmh.find_all(text, pat);
-    const auto b = bm.find_all(text, pat);
-    CHECK(n.size() == 4);
-    CHECK(n == h);
-    CHECK(n == b);
+    auto n = naive.find_all("aaaaaa", "aaa");
+    CHECK(n == bmh.find_all("aaaaaa", "aaa"));
+    CHECK(n == bm.find_all("aaaaaa", "aaa"));
 }

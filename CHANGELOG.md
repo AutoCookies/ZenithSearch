@@ -1,16 +1,14 @@
 # Changelog
 
-## v0.2.0
-- Added cross-platform memory-mapped file support with RAII wrappers and fallback behavior.
-- Added parallel scanning with configurable `--threads` and deterministic `--stable-output` mode.
-- Added search algorithm strategies: `naive`, `bmh`, `boyer_moore`, and `auto` selection.
-- Kept streaming mode with chunk-overlap correctness for cross-chunk matches.
-- Expanded tests for mmap, algorithm equivalence, and parallel determinism/robustness.
-- Updated CI with a smoke benchmark step.
+## v1.0.0
+- Added production filtering pipeline: `--exclude`, `--exclude-dir`, `--glob`, `.zenithignore`, and `--no-ignore`.
+- Added explicit symlink policy: `--follow-symlinks on|off` with cycle protection.
+- Added output limiting controls: `--max-matches`, `--max-snippet-bytes`, `--no-snippet`.
+- Added JSONL output contract fields: `path`, `mode`, `pattern`, `binary`, plus mode-specific fields.
+- Added graceful cancellation handling for SIGINT/Ctrl+C with exit code `130`.
+- Added install and packaging support via CMake install + CPack.
+- Added release workflow producing artifacts for Linux/macOS/Windows.
+- Expanded tests for filtering, globs, symlink/cancel behavior, and golden-output stability.
 
-## v0.1.0
-- Baseline streaming chunked scanner with overlap handling.
-- Recursive traversal with extension/max-size/hidden filtering.
-- Binary detection with `--binary skip|scan`.
-- Human and JSONL output modes (`--count`, `--files-with-matches`).
-- Doctest test suite and GitHub Actions CI for Ubuntu/macOS/Windows.
+## v0.2.0
+- Added mmap and parallel scanning baseline.

@@ -2,7 +2,7 @@
 
 #include "Interfaces.hpp"
 
-#include <memory>
+#include <stop_token>
 
 namespace zenith::core {
 
@@ -25,7 +25,7 @@ public:
           output_(output),
           errors_(errors) {}
 
-    SearchStats run(const SearchRequest& request) const;
+    SearchStats run(const SearchRequest& request, std::stop_token stop_token = {}) const;
 
 private:
     const ISearchAlgorithm& choose_algorithm(AlgorithmMode mode, std::size_t pattern_len, std::uintmax_t file_size) const;

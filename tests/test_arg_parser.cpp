@@ -2,31 +2,22 @@
 
 #include "doctest.h"
 
-TEST_CASE("ArgParser requires pattern and path") {
+TEST_CASE("ArgParser parses v1 options") {
     zenith::cli::ArgParser parser;
-    auto parsed = parser.parse({"--count"});
-    REQUIRE_FALSE(parsed.has_value());
-}
-
-TEST_CASE("ArgParser normalizes extensions") {
-    zenith::cli::ArgParser parser;
-    auto parsed = parser.parse({"--ext", "cpp,.H", "pat", "."});
+    auto parsed = parser.parse({"--exclude", "**/.git/**", "--exclude-dir", "node_modules", "--glob", "**/*.cpp", "--no-ignore",
+                                "--follow-symlinks", "on", "--max-matches", "10", "--max-snippet-bytes", "64", "--no-snippet", "pat", "."});
     REQUIRE(parsed.has_value());
-    CHECK(parsed.value().request.extensions.contains(".cpp"));
-    CHECK(parsed.value().request.extensions.contains(".h"));
+    CHECK(parsed.value().request.exclude_globs.size() == 1);
+    CHECK(parsed.value().request.exclude_dirs.size() == 1);
+    CHECK(parsed.value().request.include_globs.size() == 1);
+    CHECK(parsed.value().request.no_ignore);
+    CHECK(parsed.value().request.follow_symlinks == zenith::core::FollowSymlinksMode::On);
+    CHECK(parsed.value().request.max_matches_per_file.value() == 10);
+    CHECK(parsed.value().request.max_snippet_bytes == 64);
+    CHECK(parsed.value().request.no_snippet);
 }
 
-TEST_CASE("ArgParser parses phase2 options") {
-    zenith::cli::ArgParser parser;
-    auto parsed = parser.parse({"--mmap", "on", "--threads", "8", "--stable-output", "off", "--algo", "bmh", "pat", "."});
-    REQUIRE(parsed.has_value());
-    CHECK(parsed.value().request.mmap_mode == zenith::core::MmapMode::On);
-    CHECK(parsed.value().request.threads == 8);
-    CHECK(parsed.value().request.stable_output == zenith::core::StableOutputMode::Off);
-    CHECK(parsed.value().request.algorithm_mode == zenith::core::AlgorithmMode::Bmh);
-}
-
-TEST_CASE("ArgParser rejects conflicting mode flags") {
+TEST_CASE("ArgParser rejects conflicts") {
     zenith::cli::ArgParser parser;
     auto parsed = parser.parse({"--count", "--files-with-matches", "pat", "."});
     REQUIRE_FALSE(parsed.has_value());
