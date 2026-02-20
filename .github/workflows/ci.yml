@@ -1,0 +1,39 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build-test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure
+        run: cmake -S . -B build
+
+      - name: Build
+        run: cmake --build build --config Release
+
+      - name: Test
+        run: ctest --test-dir build --output-on-failure -C Release
+
+      - name: Install smoke
+        run: cmake --install build --prefix install
+
+      - name: Installed binary smoke
+        shell: bash
+        run: |
+          if [ -f install/bin/zenithsearch ]; then
+            install/bin/zenithsearch --version
+            install/bin/zenithsearch pattern README.md >/dev/null || true
+          else
+            install/bin/zenithsearch.exe --version
+            install/bin/zenithsearch.exe pattern README.md >NUL || true
+          fi
