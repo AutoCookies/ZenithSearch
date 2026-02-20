@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <charconv>
 #include <sstream>
 
 namespace zenith::cli {
@@ -16,6 +17,17 @@ std::string normalize_ext(std::string ext) {
     }
     std::transform(ext.begin(), ext.end(), ext.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
     return ext;
+}
+
+core::Expected<std::uintmax_t, core::Error> parse_u64(const std::string& value, const std::string& flag) {
+    std::uintmax_t out = 0;
+    const auto* begin = value.data();
+    const auto* end = value.data() + value.size();
+    const auto [ptr, ec] = std::from_chars(begin, end, out);
+    if (ec != std::errc{} || ptr != end) {
+        return core::Error{"invalid " + flag + " value"};
+    }
+    return out;
 }
 } // namespace
 
@@ -54,7 +66,9 @@ core::Expected<ParseResult, core::Error> ArgParser::parse(const std::vector<std:
             result.request.json_output = true;
             continue;
         }
-        if (arg == "--ext" || arg == "--max-bytes" || arg == "--binary") {
+
+        if (arg == "--ext" || arg == "--max-bytes" || arg == "--binary" || arg == "--mmap" || arg == "--threads" ||
+            arg == "--stable-output" || arg == "--algo") {
             if (i + 1 >= args.size()) {
                 return core::Error{"missing value for " + arg};
             }
@@ -69,11 +83,17 @@ core::Expected<ParseResult, core::Error> ArgParser::parse(const std::vector<std:
                     }
                 }
             } else if (arg == "--max-bytes") {
-                try {
-                    result.request.max_bytes = static_cast<std::uintmax_t>(std::stoull(value));
-                } catch (...) {
-                    return core::Error{"invalid --max-bytes value"};
+                auto parsed = parse_u64(value, "--max-bytes");
+                if (!parsed) {
+                    return parsed.error();
                 }
+                result.request.max_bytes = parsed.value();
+            } else if (arg == "--threads") {
+                auto parsed = parse_u64(value, "--threads");
+                if (!parsed) {
+                    return parsed.error();
+                }
+                result.request.threads = static_cast<std::size_t>(parsed.value());
             } else if (arg == "--binary") {
                 if (value == "skip") {
                     result.request.binary_mode = core::BinaryMode::Skip;
@@ -81,6 +101,36 @@ core::Expected<ParseResult, core::Error> ArgParser::parse(const std::vector<std:
                     result.request.binary_mode = core::BinaryMode::Scan;
                 } else {
                     return core::Error{"--binary must be skip or scan"};
+                }
+            } else if (arg == "--mmap") {
+                if (value == "auto") {
+                    result.request.mmap_mode = core::MmapMode::Auto;
+                } else if (value == "on") {
+                    result.request.mmap_mode = core::MmapMode::On;
+                } else if (value == "off") {
+                    result.request.mmap_mode = core::MmapMode::Off;
+                } else {
+                    return core::Error{"--mmap must be auto, on, or off"};
+                }
+            } else if (arg == "--stable-output") {
+                if (value == "on") {
+                    result.request.stable_output = core::StableOutputMode::On;
+                } else if (value == "off") {
+                    result.request.stable_output = core::StableOutputMode::Off;
+                } else {
+                    return core::Error{"--stable-output must be on or off"};
+                }
+            } else if (arg == "--algo") {
+                if (value == "auto") {
+                    result.request.algorithm_mode = core::AlgorithmMode::Auto;
+                } else if (value == "naive") {
+                    result.request.algorithm_mode = core::AlgorithmMode::Naive;
+                } else if (value == "boyer_moore") {
+                    result.request.algorithm_mode = core::AlgorithmMode::BoyerMoore;
+                } else if (value == "bmh") {
+                    result.request.algorithm_mode = core::AlgorithmMode::Bmh;
+                } else {
+                    return core::Error{"--algo must be auto, naive, boyer_moore, or bmh"};
                 }
             }
             continue;
@@ -113,10 +163,14 @@ std::string ArgParser::help_text() {
            "  --ext .log,.cpp,.h\n"
            "  --ignore-hidden\n"
            "  --max-bytes N\n"
-           "  --binary (skip|scan)\n"
+           "  --binary (skip|scan) [default: skip]\n"
            "  --count\n"
            "  --files-with-matches\n"
            "  --json\n"
+           "  --mmap (auto|on|off) [default: auto]\n"
+           "  --threads N [default: auto]\n"
+           "  --stable-output (on|off) [default: on]\n"
+           "  --algo (auto|naive|boyer_moore|bmh) [default: auto]\n"
            "  --help\n"
            "  --version\n";
 }

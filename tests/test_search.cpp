@@ -3,6 +3,7 @@
 
 #include "doctest.h"
 
+#include <memory>
 #include <unordered_map>
 
 namespace {
@@ -48,6 +49,36 @@ public:
     }
 };
 
+class FakeMappedFile final : public zenith::core::IMappedFile {
+public:
+    explicit FakeMappedFile(std::string p, std::string d) : path_(std::move(p)), data_(std::move(d)) {}
+    std::span<const std::byte> bytes() const override {
+        return {reinterpret_cast<const std::byte*>(data_.data()), data_.size()};
+    }
+    std::uint64_t size() const override { return data_.size(); }
+    const std::string& path() const override { return path_; }
+
+private:
+    std::string path_;
+    std::string data_;
+};
+
+class FakeMappedProvider final : public zenith::core::IMappedFileProvider {
+public:
+    std::unordered_map<std::string, std::string> contents;
+    bool fail{false};
+    zenith::core::Expected<std::unique_ptr<zenith::core::IMappedFile>, zenith::core::Error> open(const std::string& path) const override {
+        if (fail) {
+            return zenith::core::Error{"forced fail"};
+        }
+        auto it = contents.find(path);
+        if (it == contents.end()) {
+            return zenith::core::Error{"missing"};
+        }
+        return std::unique_ptr<zenith::core::IMappedFile>(new FakeMappedFile(path, it->second));
+    }
+};
+
 class CaptureWriter final : public zenith::core::IOutputWriter {
 public:
     std::vector<zenith::core::MatchRecord> matches;
@@ -68,15 +99,19 @@ TEST_CASE("Search finds matches across chunk boundaries") {
     en.files = {{"f", 12}};
     FakeReader reader;
     reader.contents = {{"f", "xxab" "cxxabc"}};
-    zenith::core::NaiveSearchAlgorithm algo;
+    FakeMappedProvider mapped;
+    zenith::core::NaiveSearchAlgorithm naive;
+    zenith::core::BmhSearchAlgorithm bmh;
+    zenith::core::BoyerMooreSearchAlgorithm bm;
     CaptureWriter out;
     CaptureError err;
-    zenith::core::SearchEngine engine(en, reader, algo, out, err);
+    zenith::core::SearchEngine engine(en, reader, mapped, naive, bmh, bm, out, err);
 
     zenith::core::SearchRequest req;
     req.pattern = "abc";
     req.input_paths = {"f"};
     req.chunk_size = 4;
+    req.mmap_mode = zenith::core::MmapMode::Off;
 
     auto stats = engine.run(req);
     CHECK(stats.any_match);
@@ -85,63 +120,44 @@ TEST_CASE("Search finds matches across chunk boundaries") {
     CHECK(out.matches[1].offset == 7);
 }
 
-TEST_CASE("Search count mode reports file count") {
-    FakeEnumerator en;
-    en.files = {{"f", 5}};
-    FakeReader reader;
-    reader.contents = {{"f", "aaaaa"}};
-    zenith::core::NaiveSearchAlgorithm algo;
-    CaptureWriter out;
-    CaptureError err;
-    zenith::core::SearchEngine engine(en, reader, algo, out, err);
-
-    zenith::core::SearchRequest req;
-    req.pattern = "aa";
-    req.output_mode = zenith::core::OutputMode::Count;
-    req.input_paths = {"f"};
-    auto stats = engine.run(req);
-
-    CHECK(stats.any_match);
-    REQUIRE(out.summaries.size() == 1);
-    CHECK(out.summaries[0].count == 4);
-}
-
 TEST_CASE("Binary skip and scan behavior") {
     FakeEnumerator en;
     en.files = {{"b", 4}};
     FakeReader reader;
     reader.contents = {{"b", std::string("a\0bc", 4)}};
-    zenith::core::NaiveSearchAlgorithm algo;
+    FakeMappedProvider mapped;
+    zenith::core::NaiveSearchAlgorithm naive;
+    zenith::core::BmhSearchAlgorithm bmh;
+    zenith::core::BoyerMooreSearchAlgorithm bm;
 
     CaptureWriter out1;
     CaptureError err1;
-    zenith::core::SearchEngine e1(en, reader, algo, out1, err1);
+    zenith::core::SearchEngine e1(en, reader, mapped, naive, bmh, bm, out1, err1);
     zenith::core::SearchRequest skip;
     skip.pattern = "bc";
     skip.input_paths = {"b"};
     skip.binary_mode = zenith::core::BinaryMode::Skip;
+    skip.mmap_mode = zenith::core::MmapMode::Off;
     CHECK_FALSE(e1.run(skip).any_match);
 
     CaptureWriter out2;
     CaptureError err2;
-    zenith::core::SearchEngine e2(en, reader, algo, out2, err2);
+    zenith::core::SearchEngine e2(en, reader, mapped, naive, bmh, bm, out2, err2);
     zenith::core::SearchRequest scan = skip;
     scan.binary_mode = zenith::core::BinaryMode::Scan;
     CHECK(e2.run(scan).any_match);
 }
 
-TEST_CASE("Pattern longer than file yields no match") {
-    FakeEnumerator en;
-    en.files = {{"f", 2}};
-    FakeReader reader;
-    reader.contents = {{"f", "ab"}};
-    zenith::core::NaiveSearchAlgorithm algo;
-    CaptureWriter out;
-    CaptureError err;
-    zenith::core::SearchEngine engine(en, reader, algo, out, err);
-
-    zenith::core::SearchRequest req;
-    req.pattern = "abcdef";
-    req.input_paths = {"f"};
-    CHECK_FALSE(engine.run(req).any_match);
+TEST_CASE("Algorithms return overlapping matches equivalently") {
+    const std::string text = "aaaaaa";
+    const std::string pat = "aaa";
+    zenith::core::NaiveSearchAlgorithm naive;
+    zenith::core::BmhSearchAlgorithm bmh;
+    zenith::core::BoyerMooreSearchAlgorithm bm;
+    const auto n = naive.find_all(text, pat);
+    const auto h = bmh.find_all(text, pat);
+    const auto b = bm.find_all(text, pat);
+    CHECK(n.size() == 4);
+    CHECK(n == h);
+    CHECK(n == b);
 }

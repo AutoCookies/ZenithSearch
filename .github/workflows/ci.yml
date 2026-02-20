@@ -23,3 +23,20 @@ jobs:
 
       - name: Test
         run: ctest --test-dir build --output-on-failure -C Release
+
+      - name: Smoke benchmark
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('big.txt')
+          chunk = 'zenith benchmark text\n' * 1024
+          with p.open('w', encoding='utf-8') as f:
+              for _ in range(2500):
+                  f.write(chunk)
+          PY
+          if [ -f build/zenithsearch ]; then
+            build/zenithsearch --count --mmap auto --threads 4 benchmark . >/dev/null
+          else
+            build/Release/zenithsearch.exe --count --mmap auto --threads 4 benchmark . >NUL
+          fi

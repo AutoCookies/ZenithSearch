@@ -6,8 +6,11 @@
 #include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <memory>
 #include <optional>
+#include <span>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace zenith::core {
@@ -15,7 +18,7 @@ namespace zenith::core {
 class ISearchAlgorithm {
 public:
     virtual ~ISearchAlgorithm() = default;
-    virtual std::vector<std::size_t> find_all(const std::string& buffer, const std::string& pattern) const = 0;
+    virtual std::vector<std::size_t> find_all(std::string_view buffer, std::string_view pattern) const = 0;
 };
 
 class IFileEnumerator {
@@ -36,6 +39,20 @@ public:
     virtual Expected<void, Error> read_chunks(const std::string& path,
                                               std::size_t chunk_size,
                                               const std::function<Expected<void, Error>(const std::string&)>& on_chunk) const = 0;
+};
+
+class IMappedFile {
+public:
+    virtual ~IMappedFile() = default;
+    virtual std::span<const std::byte> bytes() const = 0;
+    virtual std::uint64_t size() const = 0;
+    virtual const std::string& path() const = 0;
+};
+
+class IMappedFileProvider {
+public:
+    virtual ~IMappedFileProvider() = default;
+    virtual Expected<std::unique_ptr<IMappedFile>, Error> open(const std::string& path) const = 0;
 };
 
 class IOutputWriter {

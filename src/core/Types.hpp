@@ -10,8 +10,10 @@
 namespace zenith::core {
 
 enum class BinaryMode { Skip, Scan };
-
 enum class OutputMode { Matches, Count, FilesWithMatches };
+enum class MmapMode { Auto, On, Off };
+enum class StableOutputMode { On, Off };
+enum class AlgorithmMode { Auto, Naive, BoyerMoore, Bmh };
 
 struct Error {
     std::string message;
@@ -27,6 +29,12 @@ struct SearchRequest {
     OutputMode output_mode{OutputMode::Matches};
     bool json_output{false};
     std::size_t chunk_size{1024U * 1024U};
+
+    MmapMode mmap_mode{MmapMode::Auto};
+    std::size_t mmap_threshold_bytes{64U * 1024U};
+    std::size_t threads{0}; // 0 = auto
+    StableOutputMode stable_output{StableOutputMode::On};
+    AlgorithmMode algorithm_mode{AlgorithmMode::Auto};
 };
 
 struct FileItem {
@@ -43,6 +51,13 @@ struct MatchRecord {
 struct FileMatchSummary {
     std::string path;
     std::size_t count{0};
+};
+
+struct FileResult {
+    std::string path;
+    std::vector<MatchRecord> matches;
+    std::size_t count{0};
+    bool any_match{false};
 };
 
 struct SearchStats {

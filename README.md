@@ -1,11 +1,17 @@
-# ZenithSearch (Phase 1)
+# ZenithSearch (Phase 2)
 
-ZenithSearch is a cross-platform, production-grade baseline keyword search CLI (minimal grep-like tool) focused on clean architecture and deterministic behavior.
+ZenithSearch is a cross-platform keyword search CLI (minimal grep-like tool) with deterministic behavior, mmap acceleration, and parallel scanning.
 
 ## Features
 - Recursive scan across files/directories.
-- Streaming file read (default 1MB chunks) with cross-chunk match support.
-- Byte-based, case-sensitive substring search.
+- Streaming file read (1MB chunks) and memory-mapped scanning.
+- Parallel scanning with configurable thread count.
+- Deterministic stable output ordering (default on).
+- Byte-based, case-sensitive substring search with multiple algorithms:
+  - `naive`
+  - `bmh` (Boyer-Moore-Horspool)
+  - `boyer_moore`
+  - `auto`
 - Binary detection heuristic (first 4KB contains `\0`).
 - Human and JSONL output.
 - Exit codes: `0` match found, `1` no matches, `2` usage/fatal error.
@@ -26,14 +32,17 @@ ctest --test-dir build --output-on-failure
 # basic search
 ./build/zenithsearch "TODO" src
 
-# extension filter
-./build/zenithsearch --ext .cpp,.h "SearchEngine" src
+# extension filter + count
+./build/zenithsearch --ext .cpp,.h --count "SearchEngine" src
 
-# count mode
-./build/zenithsearch --count "pattern" .
+# mmap + parallel
+./build/zenithsearch --mmap on --threads 8 "pattern" .
 
-# files-with-matches mode
-./build/zenithsearch --files-with-matches "pattern" .
+# algorithm selection
+./build/zenithsearch --algo bmh "pattern" src
+
+# fast unstable output mode
+./build/zenithsearch --stable-output off --threads 8 "pattern" src
 
 # JSONL mode
 ./build/zenithsearch --json "pattern" src
@@ -44,27 +53,31 @@ Windows (PowerShell):
 .\build\zenithsearch.exe "TODO" src
 ```
 
-## `--help` example output
+## `--help` output
 ```text
 Usage: zenithsearch [options] <pattern> <path...>
 Options:
   --ext .log,.cpp,.h
   --ignore-hidden
   --max-bytes N
-  --binary (skip|scan)
+  --binary (skip|scan) [default: skip]
   --count
   --files-with-matches
   --json
+  --mmap (auto|on|off) [default: auto]
+  --threads N [default: auto]
+  --stable-output (on|off) [default: on]
+  --algo (auto|naive|boyer_moore|bmh) [default: auto]
   --help
   --version
 ```
 
 ## Project layout
-- `src/core`: interfaces, DTOs, expected type, search engine, algorithm.
-- `src/platform`: filesystem enumeration, file reader, stdout/stderr writers.
+- `src/core`: DTOs, expected type, algorithms, search engine.
+- `src/platform`: filesystem enumeration, file reader, mmap providers, output writers.
 - `src/cli`: argument parser.
-- `tests`: Doctest-based test suite.
-- `.github/workflows/ci.yml`: CI matrix for Linux/macOS/Windows.
+- `tests`: header-only test suite.
+- `.github/workflows/ci.yml`: CI matrix for Linux/macOS/Windows + smoke benchmark.
 
 ## Roadmap
-Phase 2 will add mmap-based IO, parallelism, and faster search algorithms.
+Phase 3 may add indexing and advanced query capabilities.

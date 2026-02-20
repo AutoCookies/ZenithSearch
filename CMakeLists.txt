@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(ZenithSearch VERSION 0.1.0 LANGUAGES CXX)
+project(ZenithSearch VERSION 0.2.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -11,6 +11,13 @@ else()
   add_compile_options(-Wall -Wextra -Wpedantic -Werror)
 endif()
 
+set(ZENITH_PLATFORM_MMAP_SRC)
+if(WIN32)
+  list(APPEND ZENITH_PLATFORM_MMAP_SRC src/platform/windows/MappedFileWin.cpp)
+else()
+  list(APPEND ZENITH_PLATFORM_MMAP_SRC src/platform/posix/MappedFilePosix.cpp)
+endif()
+
 add_library(zenithsearch_core
   src/core/NaiveSearchAlgorithm.cpp
   src/core/SearchEngine.cpp
@@ -18,6 +25,7 @@ add_library(zenithsearch_core
   src/platform/StdFilesystemEnumerator.cpp
   src/platform/StdFileReader.cpp
   src/platform/OutputWriters.cpp
+  ${ZENITH_PLATFORM_MMAP_SRC}
 )
 target_include_directories(zenithsearch_core PUBLIC src)
 
@@ -33,6 +41,8 @@ if(BUILD_TESTING)
     tests/test_filesystem.cpp
     tests/test_output.cpp
     tests/test_exit_codes.cpp
+    tests/test_mmap.cpp
+    tests/test_parallel.cpp
   )
   target_link_libraries(zenithsearch_tests PRIVATE zenithsearch_core)
   target_include_directories(zenithsearch_tests PRIVATE src tests)

@@ -1,6 +1,7 @@
 #include "cli/ArgParser.hpp"
 #include "core/NaiveSearchAlgorithm.hpp"
 #include "core/SearchEngine.hpp"
+#include "platform/MappedFileProvider.hpp"
 #include "platform/OutputWriters.hpp"
 #include "platform/StdFileReader.hpp"
 #include "platform/StdFilesystemEnumerator.hpp"
@@ -27,19 +28,29 @@ int main(int argc, char** argv) {
         return 0;
     }
     if (parsed.value().show_version) {
-        std::cout << "zenithsearch v0.1.0\n";
+        std::cout << "zenithsearch v0.2.0\n";
         return 0;
     }
 
     zenith::platform::StdFilesystemEnumerator enumerator;
     zenith::platform::StdFileReader reader;
-    zenith::core::NaiveSearchAlgorithm algorithm;
+    zenith::platform::MappedFileProvider mapped_provider;
+    zenith::core::NaiveSearchAlgorithm naive_algorithm;
+    zenith::core::BmhSearchAlgorithm bmh_algorithm;
+    zenith::core::BoyerMooreSearchAlgorithm bm_algorithm;
     auto output = zenith::platform::make_output_writer(parsed.value().request.json_output,
                                                         parsed.value().request.output_mode,
                                                         std::cout);
     zenith::platform::StreamErrorWriter err(std::cerr);
 
-    zenith::core::SearchEngine engine(enumerator, reader, algorithm, *output, err);
+    zenith::core::SearchEngine engine(enumerator,
+                                      reader,
+                                      mapped_provider,
+                                      naive_algorithm,
+                                      bmh_algorithm,
+                                      bm_algorithm,
+                                      *output,
+                                      err);
     const auto stats = engine.run(parsed.value().request);
     return stats.any_match ? 0 : 1;
 }
