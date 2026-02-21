@@ -1,6 +1,22 @@
-# ZenithSearch v1.0.0
+  <h1>ZenithSearch</h1>
 
-Production-ready cross-platform keyword search CLI with deterministic output, mmap acceleration, parallel scan, ignore/exclude/glob filtering, and graceful cancellation.
+<div align="center">
+  <img src="assets/logo.png" alt="ZenithSearch Logo" width="180"/>
+
+  <p>Production-ready cross-platform keyword search CLI with deterministic output, mmap acceleration, parallel scan, ignore/exclude/glob filtering, and graceful cancellation.</p>
+
+  <a href="https://discord.gg/nnkfW83n">
+    <img src="https://img.shields.io/badge/Discord-Join%20Community-5865F2?style=for-the-badge&logo=discord&logoColor=white" alt="Discord"/>
+  </a>
+  &nbsp;
+  <img src="https://img.shields.io/badge/C%2B%2B-20-00599C?style=for-the-badge&logo=c%2B%2B&logoColor=white" alt="C++20"/>
+  &nbsp;
+  <img src="https://img.shields.io/badge/CMake-3.20%2B-064F8C?style=for-the-badge&logo=cmake&logoColor=white" alt="CMake"/>
+  &nbsp;
+  <img src="https://img.shields.io/badge/License-NC%20Copyleft-red?style=for-the-badge" alt="License: NC Copyleft"/>
+</div>
+
+---
 
 ## Build
 ```bash
